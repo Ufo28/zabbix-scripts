@@ -42,6 +42,17 @@ fork_get_status() {
     fi
 }
 
+fork_discover() {
+    # Return a list of running services in JSON
+    SRVCS=$($COMMAND status | grep Running | awk '{$(NF--)=""; print}' | sed 's/^/\t{ \"{#ZIMBRASERVICE}\":\"/' | sed 's/\ $/\" },/')
+    echo "{"
+    echo -e "\t\"data\":[\n"
+    # Remove last comma from the sting, to make a good JSON
+    echo $(echo $SRVCS | sed 's/,\+$//')
+    echo -e "\n\t]\n"
+    echo "}"
+}
+
 case "$1" in
     version)
     # Return zimbra version
@@ -54,14 +65,8 @@ case "$1" in
     exit 1;
     ;;
     discover)
-    # Return a list of running services in JSON
-	echo "{"
-	echo -e "\t\"data\":[\n"
-    	SRVCS=$($COMMAND status | grep Running | awk '{$(NF--)=""; print}' | sed 's/^/\t{ \"{#ZIMBRASERVICE}\":\"/' | sed 's/\ $/\" },/')
-	# Remove last comma from the sting, to make a good JSON
-	echo $(echo $SRVCS | sed 's/,\+$//')
-	echo -e "\n\t]\n"
-	echo "}"
+       cat $DISCOVER_FILE
+       fork_discover >$DISCOVER_FILE &
     exit 0;
     ;;
     *)
