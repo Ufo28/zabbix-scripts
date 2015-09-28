@@ -13,7 +13,7 @@ COMMAND="sudo -u zimbra /opt/zimbra/bin/zmcontrol"
 FILE='/var/run/zabbix/zimbra_status'
 
 fork_get_status() {
-    maxage=120
+    maxage=100
 
     # Very basic concurrency check
     x=0
