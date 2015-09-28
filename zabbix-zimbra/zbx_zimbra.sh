@@ -10,9 +10,40 @@
 #set -x
 
 COMMAND="sudo -u zimbra /opt/zimbra/bin/zmcontrol"
+FILE='/var/run/zabbix/zimbra_status'
+
+fork_get_status() {
+    maxage=120
+
+    # Very basic concurrency check
+    x=0
+    while [ -f "$FILE.tmp" ]; do
+        sleep 5;
+        x=$((x+1))
+        # don't wait too long anyway, remove an eventually stale lock. Anyway we have 15s zabbix agent timeout
+        if [ $x -ge 3 ]; then
+            rm "$FILE.tmp";
+        fi
+    done
+    #check if cached status file size > 0
+    if [ -s ${FILE} ]; then
+        OLD=`stat -c %Z $FILE`
+        NOW=`date +%s`
+
+    # if older then maxage, update file
+    if [ `expr $NOW - $OLD` -gt $maxage ]; then
+        $COMMAND status > $FILE.tmp
+        mv $FILE.tmp $FILE
+    fi
+    else
+        rm -f ${FILE}
+        $COMMAND status > $FILE.tmp
+        mv $FILE.tmp $FILE
+    fi
+}
 
 case "$1" in
-    version) 
+    version)
     # Return zimbra version
     VERS=$($COMMAND -v)
     if [ $? -eq 0 ] ; then
@@ -22,7 +53,7 @@ case "$1" in
     # error
     exit 1;
     ;;
-    discover) 
+    discover)
     # Return a list of running services in JSON
 	echo "{"
 	echo -e "\t\"data\":[\n"
@@ -35,43 +66,16 @@ case "$1" in
     ;;
     *)
     # move on...
-	check=$1
+        check=$1
 
 	if [ "$check" = "" ]; then
 	  echo "No Zimbra service specified..."
 	  exit 1
 	fi
 
-	maxage=120
-	file='/var/run/zabbix/zimbra_status'
+        fork_get_status &
 
-	# Very basic concurrency check
-	x=0
-	while [ -f "$file.tmp" ]; do
-		sleep 5;
-		x=$((x+1))
-		# don't wait too long anyway, remove an eventually stale lock. Anyway we have 15s zabbix agent timeout
-		if [ $x -ge 3 ]; then
-			rm "$file.tmp";
-		fi
-	done
-	#check if cached status file size > 0
-	if [ -s ${file} ]; then 
-	  OLD=`stat -c %Z $file`
-	  NOW=`date +%s`
-
-	  # if older then maxage, update file
-	  if [ `expr $NOW - $OLD` -gt $maxage ]; then
-	    $COMMAND status > $file.tmp
-	    mv $file.tmp $file
-	  fi
-	else
-	    rm -f ${file}
-	    $COMMAND status > $file.tmp
-	    mv $file.tmp $file
-	fi
-
-	STATUS="$(cat $file | grep "$check" | awk '{print $NF}')"
+	STATUS="$(cat $FILE | grep "$check" | awk '{print $NF}')"
 
 	if [ "$STATUS" != "Running" ]; then
 	  echo 0
@@ -82,4 +86,3 @@ case "$1" in
 esac
 
 exit 0;
-
